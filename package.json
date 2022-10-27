@@ -1,0 +1,11 @@
+{
+  "name": "hammer",
+  "version": "1.0.0",
+  "description": "Implementacion Metodo Caracteristicas",
+  "main": "main.py",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "SSA1917",
+  "license": "MIT"
+}
