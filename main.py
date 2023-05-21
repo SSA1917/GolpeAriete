@@ -15,7 +15,7 @@ class MetodoCaracteristicas:
         self.Area = 0
         self.fFriccion = 0#Factor de friccionde Darcy
         self.TcTiempoCierre = 6#Tiempo de cierre de la valvula
-        
+        self.nTramos = 0
         #Flujo
         self.cCEleridad = 1000#Velocidad de onda de sobre presion
         #Secciones Matrices de n dimensiones
@@ -30,32 +30,34 @@ class MetodoCaracteristicas:
         self.R = 0#Constante
 
         #Presentacion
-        self.Dates = {}
+        self.HDates = {}
+        self.QDates = {}
+        self.All = {}
     #Calculos
-    def Geometria(self, Longitud, Diametro, nTramos, fFriccion):
+    def Geometria(self, Longitud, Diametro, Tramos, fFriccion):
         
         self.Radio = Diametro/2
         self.Longitud = Longitud
         self.fFriccion = fFriccion
-
+        self.nTramos = Tramos
         self.Area = math.pi*self.Radio**2#Seccion circular
 
-        self.DX = Longitud/nTramos
-        self.DT = Longitud/(self.cCEleridad*nTramos)#Paso de tiempo
+        self.DX = Longitud/Tramos
+        self.DT = Longitud/(self.cCEleridad*Tramos)#Paso de tiempo
         self.Ch = self.cCEleridad/(9.8*self.Area)
         self.R = fFriccion*self.DX/(2*9.8*self.Area**2)
         
         
-    def CondicionesIniciales(self,Columnas,Filas,HCargaInicial,QcaudalInicial):
+    def CondicionesIniciales(self,Filas,HCargaInicial,QcaudalInicial):
 
-        self.Hcarga = np.zeros((Columnas,Filas))#NumeroSecciones,NumeroFila o paso de tiempo
-        self.Qcaudal = np.zeros((Columnas,Filas))#NumeroSecciones,NumeroFila o paso de tiempo
-        self.Cp = np.zeros((Columnas,Filas))#NumeroSecciones,NumeroFila o paso de tiempo
+        self.Hcarga = np.zeros((self.nTramos,Filas))#NumeroSecciones,NumeroFila o paso de tiempo
+        self.Qcaudal = np.zeros((self.nTramos,Filas))#NumeroSecciones,NumeroFila o paso de tiempo
+        self.Cp = np.zeros((self.nTramos,Filas))#NumeroSecciones,NumeroFila o paso de tiempo
         
         self.Hcarga[0].fill(HCargaInicial)#Para una carga incial constante en el tiempo
  
         
-        for v in range(0,Columnas,1):
+        for v in range(0,self.nTramos,1):
             #Hcarga Inicial
             
             self.Hcarga[v][0] = self.Hcarga[0][0]-(v)*self.R*self.Qcaudal[0][0]**2#Carga incial en cada seccion
@@ -63,13 +65,13 @@ class MetodoCaracteristicas:
             self.Qcaudal[v][0] = QcaudalInicial#Caudal Inicial en cada seccion
 
 
-    def Calculos(self,Columnas,Filas):  #Para un Reservorio con carga constante en la primera y una valvula de cierre en la ultima seccion
+    def Calculos(self,Filas):  #Para un Reservorio con carga constante en la primera y una valvula de cierre en la ultima seccion
         Time = 0
         for j in range(1,Filas-1,1):    
             #Caudal Primera Seccion 
             self.Qcaudal[0][j] = (self.Hcarga[0][j-1]-self.Hcarga[1][j-1]-self.Qcaudal[1][j-1]*( self.R*self.Qcaudal[1][j-1] - self.Ch))/self.Ch 
                         
-            for i in range(1,Columnas-2,1):
+            for i in range(1,self.nTramos-2,1):
 
                 #Qcaudal,Hcarga,Cp en Secciones Intermedias
                 self.Cp[i][j] = (self.Hcarga[i-1][j-1]+self.Qcaudal[i-1][j-1]*(self.Ch-self.R*self.Qcaudal[i-1][j-1]))
@@ -79,66 +81,43 @@ class MetodoCaracteristicas:
                 self.Qcaudal[i][j] = (self.Cp[i][j]-self.Hcarga[i][j])/self.Ch
                         
             #Qcaudal,Cp, Hcarga Ultima Seccion
-            if(Time >= 6):
-                self.Qcaudal[5][j] = 0
+            if(Time >= self.TcTiempoCierre):
+                self.Qcaudal[self.TcTiempoCierre-1][j] = 0
             else:
-                self.Qcaudal[5][j] = (1-((j)/self.TcTiempoCierre) )*self.Qcaudal[0][0]
-            self.Cp[5][j] = self.Hcarga[5-1][j-1] + self.Qcaudal[5-1][j-1]*(self.Ch-self.R*self.Qcaudal[5-1][j-1])
-            self.Hcarga[5][j] = self.Cp[5][j]-self.Ch*self.Qcaudal[5-1][j]
+                self.Qcaudal[self.TcTiempoCierre-1][j] = (1-((j)/self.TcTiempoCierre) )*self.Qcaudal[0][0]
+            self.Cp[self.TcTiempoCierre-1][j] = self.Hcarga[self.TcTiempoCierre-2][j-1] + self.Qcaudal[self.TcTiempoCierre-2][j-1]*(self.Ch-self.R*self.Qcaudal[self.TcTiempoCierre-2][j-1])
+            self.Hcarga[self.TcTiempoCierre-1][j] = self.Cp[self.TcTiempoCierre-1][j]-self.Ch*self.Qcaudal[self.TcTiempoCierre-2][j]
             
             Time +=1
 
-    def Presentacion(self):
-        self.Dates = {
-                'H0': self.Hcarga[0],
-                'Q0': self.Qcaudal[0],
-                
-                'H1': self.Hcarga[1],
-                'Q1': self.Qcaudal[1],
-                
-                'H2': self.Hcarga[2],
-                'Q2': self.Qcaudal[2],
-                
-                'H3': self.Hcarga[3],
-                'Q3': self.Qcaudal[3],
-                
-                'H4': self.Hcarga[4],
-                'Q4': self.Qcaudal[4],
-                
-                'H5': self.Hcarga[5],
-                'Q5': self.Qcaudal[5],
+        
+    def Validacion(self):
+        
+        for i in range(self.nTramos-1):
+            self.HDates.update({f'H{i}': self.Hcarga[i]})
+            self.QDates.update({f'Q{i}': self.Qcaudal[i]})
+            self.All.update({f'H{i}': self.Hcarga[i]})
+            self.All.update({f'Q{i}': self.Qcaudal[i]})
 
-                'H6': self.Hcarga[6],
-                'Q6': self.Qcaudal[6],
+        TableH = pd.DataFrame(self.HDates)
+        TablesQ = pd.DataFrame(self.QDates)
+        TableAll = pd.DataFrame(self.All)
 
-
-                
-            }
-        
-        Table = pd.DataFrame(self.Dates)
-        Table.to_csv('TablaVersion1.csv')
-        
-        
-    def Validacion(self, Filas):
-        
-        X = np.arange(Filas)
-        fig = plt.figure()
-        
-        plt.plot(X,self.Dates.get('H0'), label='Seccion1')
-        plt.plot(X,self.Dates.get('H1'), label='Seccion2')
-        plt.plot(X,self.Dates.get('H2'), label='Seccion3')
-        plt.plot(X,self.Dates.get('H3'), label='Seccion4')
-        plt.plot(X,self.Dates.get('H4'), label='Seccion5')
-        plt.plot(X,self.Dates.get('H5'), label='Seccion6')
+        TableH.plot(kind='line')
+        plt.xlabel('Tiempo(s)')
+        plt.ylabel('HCarga(m)')
+        plt.legend()
+        plt.grid(True)
+        plt.autoscale()
+        plt.savefig("img.pdf", dpi=300, bbox_inches='tight')
         plt.legend()
         plt.show()
 
 M1 = MetodoCaracteristicas()
-def Prueba(Longitud, Diametro, nTramos, fFriccion, Columnas,Filas ,HCargaInicial, QcaudalInicial):
-    M1.Geometria(Longitud, Diametro, nTramos, fFriccion)#Longitud, Diametro, nTramos, fFriccion
-    M1.CondicionesIniciales(Columnas,Filas,HCargaInicial,QcaudalInicial)#Columnas,Filas,HCargaInicial,QcaudalInicial
-    M1.Calculos(Columnas,Filas)#Columnas,Filas
-    M1.Presentacion()
-    M1.Validacion(Filas)#Filas
+def Prueba(Longitud, Diametro, Tramos, fFriccion, Filas ,HCargaInicial, QcaudalInicial):
+    M1.Geometria(Longitud, Diametro, Tramos, fFriccion)#Longitud, Diametro, nTramos, fFriccion
+    M1.CondicionesIniciales(Filas,HCargaInicial,QcaudalInicial)#,Filas,HCargaInicial,QcaudalInicial
+    M1.Calculos(Filas)#,Filas
+    M1.Validacion()#Filas
 
-Prueba(5000,1.8,5,0.02,7,30,80,6)#Longitud, Diametro, nTramos, fFriccion, Columnas,Filas, HCargaInicial, QcaudalInicial,
+Prueba(5000,1.8,7,0.02,30,80,6)#Longitud, Diametro, nTramos, fFriccion, ,Filas, HCargaInicial, QcaudalInicial,
